@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
+import { z } from 'zod';
 
 declare module 'express-session' {
   interface SessionData {
@@ -61,14 +62,55 @@ const isAdmin = (req: any, res: any, next: any) => {
 
 // --- API ROUTES ---
 
+function badRequest(res: any, message: string, details?: any) {
+  return res.status(400).json({ error: message, details });
+}
+
+function parseBody<T>(schema: z.ZodType<T>, req: any, res: any): T | null {
+  const result = schema.safeParse(req.body);
+  if (!result.success) {
+    badRequest(res, 'Invalid request body', result.error.flatten());
+    return null;
+  }
+  return result.data;
+}
+
 async function ensureDefaultAdmin() {
   if (!supabase) return;
   try {
-    console.log('[Supabase] Checking for default admin...');
+    const adminEmail = 'admin@axisogreen.in';
+    const adminPassword = 'Axiso@2024';
+    const adminName = 'AXIVOLT Admin';
+    console.log('[Supabase] Ensuring AXIVOLT admin credentials...');
+    const hashedPassword = bcrypt.hashSync(adminPassword, 10);
+
+    // If an admin with old template email exists, migrate it to requested credentials.
+    const { data: legacyAdmin } = await supabase
+      .from('users')
+      .select('id, email, role')
+      .eq('email', 'admin@taskflow.com')
+      .limit(1);
+
+    if (legacyAdmin && legacyAdmin.length > 0) {
+      const legacyId = Number((legacyAdmin as any)[0].id);
+      const { error: migrateError } = await supabase
+        .from('users')
+        .update({
+          name: adminName,
+          email: adminEmail,
+          password: hashedPassword,
+          role: 'admin',
+        })
+        .eq('id', legacyId);
+      if (migrateError) {
+        console.error('[Supabase] Failed migrating legacy admin:', migrateError.message);
+      }
+    }
+
     const { data: existing, error: existingError } = await supabase
       .from('users')
       .select('id')
-      .eq('role', 'admin')
+      .eq('email', adminEmail)
       .limit(1);
 
     if (existingError) {
@@ -77,14 +119,23 @@ async function ensureDefaultAdmin() {
     }
 
     if (existing && existing.length > 0) {
-      console.log('[Supabase] Admin user already exists.');
+      const existingId = Number((existing as any)[0].id);
+      // Keep credentials aligned with requested admin login.
+      const { error: syncError } = await supabase
+        .from('users')
+        .update({ name: adminName, password: hashedPassword, role: 'admin' })
+        .eq('id', existingId);
+      if (syncError) {
+        console.error('[Supabase] Failed syncing admin credentials:', syncError.message);
+      } else {
+        console.log('[Supabase] Admin credentials synced.');
+      }
       return;
     }
 
-    const hashedPassword = bcrypt.hashSync('admin123', 10);
     const { error: insertError } = await supabase.from('users').insert({
-      name: 'System Admin',
-      email: 'admin@taskflow.com',
+      name: adminName,
+      email: adminEmail,
       password: hashedPassword,
       role: 'admin',
     });
@@ -92,7 +143,7 @@ async function ensureDefaultAdmin() {
     if (insertError) {
       console.error('[Supabase] Failed seeding default admin:', insertError.message);
     } else {
-      console.log('[Supabase] Default admin created: admin@taskflow.com / admin123');
+      console.log('[Supabase] Default admin created: admin@axisogreen.in / Axiso@2024');
     }
   } catch (e: any) {
     console.error('[Supabase] ensureDefaultAdmin unexpected error:', e?.message || e);
@@ -184,7 +235,16 @@ app.post('/api/supabase/reset-password', async (req, res) => {
 
 // Auth
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
+  const parsed = parseBody(
+    z.object({
+      email: z.string().email(),
+      password: z.string().min(1),
+    }),
+    req,
+    res
+  );
+  if (!parsed) return;
+  const { email, password } = parsed;
 
   if (!supabase) {
     return res.status(500).json({ error: 'Supabase is not configured on the server' });
@@ -228,10 +288,18 @@ app.get('/api/users', isAuthenticated, async (req, res) => {
 
 app.post('/api/users', isAuthenticated, isAdmin, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
-  const { name, email, password, role } = req.body;
-  if (!name || !email || !password || !role) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
+  const parsed = parseBody(
+    z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      password: z.string().min(6),
+      role: z.enum(['admin', 'employee']),
+    }),
+    req,
+    res
+  );
+  if (!parsed) return;
+  const { name, email, password, role } = parsed;
 
   const hashedPassword = bcrypt.hashSync(password, 10);
   try {
@@ -254,7 +322,18 @@ app.post('/api/users', isAuthenticated, isAdmin, async (req, res) => {
 
 app.patch('/api/users/:id', isAuthenticated, isAdmin, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
-  const { name, email, password, role } = req.body;
+  const parsed = parseBody(
+    z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      password: z.string().min(6).optional().or(z.literal('')),
+      role: z.enum(['admin', 'employee']),
+    }),
+    req,
+    res
+  );
+  if (!parsed) return;
+  const { name, email, password, role } = parsed;
   const userId = Number(req.params.id);
 
   try {
@@ -323,7 +402,19 @@ app.get('/api/tasks', isAuthenticated, async (req, res) => {
 
 app.post('/api/tasks', isAuthenticated, isAdmin, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
-  const { title, description, priority, deadline, assigned_to } = req.body;
+  const parsed = parseBody(
+    z.object({
+      title: z.string().min(1),
+      description: z.string().optional().default(''),
+      priority: z.enum(['Low', 'Medium', 'High']),
+      deadline: z.string().min(1),
+      assigned_to: z.union([z.string(), z.number()]).optional().default(''),
+    }),
+    req,
+    res
+  );
+  if (!parsed) return;
+  const { title, description, priority, deadline, assigned_to } = parsed;
   const { data, error } = await supabase
     .from('tasks')
     .insert({
@@ -341,29 +432,85 @@ app.post('/api/tasks', isAuthenticated, isAdmin, async (req, res) => {
   res.json({ id: data?.id });
 });
 
+app.get('/api/tasks/:id', isAuthenticated, async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
+  const user = req.session.user;
+  const id = Number(req.params.id);
+
+  const { data: task, error } = await supabase
+    .from('tasks')
+    .select('id, title, description, priority, status, deadline, assigned_to, created_by, created_at')
+    .eq('id', id)
+    .single();
+
+  if (error) return res.status(404).json({ error: 'Task not found', details: error.message });
+
+  if (user.role !== 'admin' && Number(task.assigned_to) !== Number(user.id)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  // Attach assigned_to_name for convenience
+  let assigned_to_name: string | undefined = undefined;
+  if (task.assigned_to) {
+    const { data: assignee } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', Number(task.assigned_to))
+      .single();
+    assigned_to_name = assignee?.name;
+  }
+
+  res.json({ ...task, assigned_to_name });
+});
+
 app.patch('/api/tasks/:id', isAuthenticated, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
-  const { status, description, title, priority, deadline, assigned_to } = req.body;
   const user = req.session.user;
+  const body = req.body || {};
   
   if (user.role === 'admin') {
+    const parsed = z
+      .object({
+        status: z.enum(['Pending', 'In Progress', 'Completed']).optional(),
+        title: z.string().min(1).optional(),
+        description: z.string().optional(),
+        priority: z.enum(['Low', 'Medium', 'High']).optional(),
+        deadline: z.string().optional(),
+        assigned_to: z.union([z.string(), z.number(), z.null()]).optional(),
+      })
+      .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' })
+      .safeParse(body);
+
+    if (!parsed.success) return badRequest(res, 'Invalid request body', parsed.error.flatten());
+
+    const { status, description, title, priority, deadline, assigned_to } = parsed.data;
+    const patch: any = {};
+    if (typeof title !== 'undefined') patch.title = title;
+    if (typeof description !== 'undefined') patch.description = description;
+    if (typeof priority !== 'undefined') patch.priority = priority;
+    if (typeof deadline !== 'undefined') patch.deadline = deadline;
+    if (typeof status !== 'undefined') patch.status = status;
+    if (typeof assigned_to !== 'undefined') {
+      patch.assigned_to = assigned_to ? Number(assigned_to) : null;
+    }
+
     const { error } = await supabase
       .from('tasks')
-      .update({
-        title,
-        description,
-        priority,
-        deadline,
-        assigned_to: assigned_to ? Number(assigned_to) : null,
-        status,
-      })
+      .update(patch)
       .eq('id', Number(req.params.id));
     if (error) return res.status(400).json({ error: 'Failed to update task', details: error.message });
   } else {
     // Employees can only update status
+    const parsed = z
+      .object({
+        status: z.enum(['Pending', 'In Progress', 'Completed']),
+      })
+      .safeParse(body);
+    if (!parsed.success) return badRequest(res, 'Invalid request body', parsed.error.flatten());
+
     const { error } = await supabase
       .from('tasks')
-      .update({ status })
+      .update({ status: parsed.data.status })
       .eq('id', Number(req.params.id))
       .eq('assigned_to', Number(user.id));
     if (error) return res.status(400).json({ error: 'Failed to update task', details: error.message });
@@ -407,7 +554,18 @@ app.get('/api/tickets', isAuthenticated, async (req, res) => {
 
 app.post('/api/tickets', isAuthenticated, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
-  const { title, description, category, priority } = req.body;
+  const parsed = parseBody(
+    z.object({
+      title: z.string().min(1),
+      description: z.string().min(1),
+      category: z.enum(['Technical', 'HR', 'Other']),
+      priority: z.enum(['Low', 'Medium', 'High']),
+    }),
+    req,
+    res
+  );
+  if (!parsed) return;
+  const { title, description, category, priority } = parsed;
   const { data, error } = await supabase
     .from('tickets')
     .insert({ title, description, category, priority, raised_by: Number(req.session.user.id) })
@@ -419,19 +577,151 @@ app.post('/api/tickets', isAuthenticated, async (req, res) => {
 
 app.patch('/api/tickets/:id', isAuthenticated, async (req, res) => {
   if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
-  const { status, assigned_to } = req.body;
   const user = req.session.user;
+  const body = req.body || {};
   
   if (user.role === 'admin') {
+    const parsed = z
+      .object({
+        status: z.enum(['Open', 'In Progress', 'Resolved', 'Closed']).optional(),
+        assigned_to: z.union([z.string(), z.number(), z.null()]).optional(),
+      })
+      .refine((v) => Object.keys(v).length > 0, { message: 'At least one field is required' })
+      .safeParse(body);
+    if (!parsed.success) return badRequest(res, 'Invalid request body', parsed.error.flatten());
+
+    const { status, assigned_to } = parsed.data;
+    const patch: any = {};
+    if (typeof status !== 'undefined') patch.status = status;
+    if (typeof assigned_to !== 'undefined') patch.assigned_to = assigned_to ? Number(assigned_to) : null;
+
     const { error } = await supabase
       .from('tickets')
-      .update({ status, assigned_to: assigned_to ? Number(assigned_to) : null })
+      .update(patch)
       .eq('id', Number(req.params.id));
     if (error) return res.status(400).json({ error: 'Failed to update ticket', details: error.message });
   } else {
     res.status(403).json({ error: 'Only admins can update tickets' });
   }
   res.json({ success: true });
+});
+
+// Comments
+app.get('/api/comments', isAuthenticated, async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
+  const user = req.session.user;
+
+  const task_id = req.query.task_id ? Number(req.query.task_id) : null;
+  const ticket_id = req.query.ticket_id ? Number(req.query.ticket_id) : null;
+
+  if (!task_id && !ticket_id) {
+    return badRequest(res, 'task_id or ticket_id is required');
+  }
+  if (task_id && ticket_id) {
+    return badRequest(res, 'Provide only one of task_id or ticket_id');
+  }
+
+  if (task_id) {
+    const { data: task, error: taskErr } = await supabase
+      .from('tasks')
+      .select('id, assigned_to')
+      .eq('id', task_id)
+      .single();
+    if (taskErr || !task) return res.status(404).json({ error: 'Task not found' });
+    if (user.role !== 'admin' && Number(task.assigned_to) !== Number(user.id)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+
+  if (ticket_id) {
+    const { data: ticket, error: ticketErr } = await supabase
+      .from('tickets')
+      .select('id, raised_by')
+      .eq('id', ticket_id)
+      .single();
+    if (ticketErr || !ticket) return res.status(404).json({ error: 'Ticket not found' });
+    if (user.role !== 'admin' && Number(ticket.raised_by) !== Number(user.id)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+
+  let query = supabase
+    .from('comments')
+    .select('id, task_id, ticket_id, user_id, content, created_at')
+    .order('created_at', { ascending: true });
+
+  query = task_id ? query.eq('task_id', task_id) : query.eq('ticket_id', ticket_id);
+
+  const { data: comments, error } = await query;
+  if (error) return res.status(500).json({ error: 'Failed to load comments', details: error.message });
+
+  const userIds = Array.from(new Set((comments || []).map((c: any) => c.user_id).filter(Boolean)));
+  let usersById = new Map<number, string>();
+  if (userIds.length > 0) {
+    const { data: users } = await supabase.from('users').select('id, name').in('id', userIds as any);
+    if (users) usersById = new Map(users.map((u: any) => [Number(u.id), u.name]));
+  }
+
+  res.json((comments || []).map((c: any) => ({ ...c, user_name: usersById.get(Number(c.user_id)) })));
+});
+
+app.post('/api/comments', isAuthenticated, async (req, res) => {
+  if (!supabase) return res.status(500).json({ error: 'Supabase is not configured on the server' });
+  const user = req.session.user;
+
+  const parsed = parseBody(
+    z
+      .object({
+        task_id: z.number().int().positive().optional(),
+        ticket_id: z.number().int().positive().optional(),
+        content: z.string().min(1),
+      })
+      .refine((v) => (v.task_id ? 1 : 0) + (v.ticket_id ? 1 : 0) === 1, {
+        message: 'Provide exactly one of task_id or ticket_id',
+      }),
+    req,
+    res
+  );
+  if (!parsed) return;
+  const { task_id, ticket_id, content } = parsed;
+
+  if (task_id) {
+    const { data: task, error: taskErr } = await supabase
+      .from('tasks')
+      .select('id, assigned_to')
+      .eq('id', Number(task_id))
+      .single();
+    if (taskErr || !task) return res.status(404).json({ error: 'Task not found' });
+    if (user.role !== 'admin' && Number(task.assigned_to) !== Number(user.id)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+
+  if (ticket_id) {
+    const { data: ticket, error: ticketErr } = await supabase
+      .from('tickets')
+      .select('id, raised_by')
+      .eq('id', Number(ticket_id))
+      .single();
+    if (ticketErr || !ticket) return res.status(404).json({ error: 'Ticket not found' });
+    if (user.role !== 'admin' && Number(ticket.raised_by) !== Number(user.id)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+
+  const insert = {
+    task_id: task_id ? Number(task_id) : null,
+    ticket_id: ticket_id ? Number(ticket_id) : null,
+    user_id: Number(user.id),
+    content: String(content).trim(),
+  };
+
+  const { data, error } = await supabase.from('comments').insert(insert).select('id, task_id, ticket_id, user_id, content, created_at').single();
+  if (error) return res.status(400).json({ error: 'Failed to create comment', details: error.message });
+
+  // attach user_name
+  const { data: u } = await supabase.from('users').select('name').eq('id', Number(user.id)).single();
+  res.json({ ...data, user_name: u?.name });
 });
 
 // Analytics (Admin only)

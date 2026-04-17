@@ -39,3 +39,13 @@ export interface Analytics {
   ticketStats: { status: string; count: number }[];
   employeePerformance: { name: string; completed_tasks: number }[];
 }
+
+export interface Comment {
+  id: number;
+  task_id?: number | null;
+  ticket_id?: number | null;
+  user_id: number;
+  user_name?: string;
+  content: string;
+  created_at: string;
+}
