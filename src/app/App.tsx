@@ -9,27 +9,24 @@ import { TasksPage } from "../pages/TasksPage";
 import { TicketsPage } from "../pages/TicketsPage";
 import { UsersPage } from "../pages/UsersPage";
 import { User } from "../types";
+import { clientAuth } from "../lib/client-api";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    fetch("/api/auth/me", { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setUser(data))
-      .catch(() => setUser(null))
-      .finally(() => {
-        setLoading(false);
-        clearTimeout(timeoutId);
-      });
+    // For static site, check localStorage for user session
+    const timeoutId = setTimeout(() => {
+      const user = clientAuth.getCurrentUser();
+      setUser(user);
+      setLoading(false);
+      clearTimeout(timeoutId);
+    }, 500);
   }, []);
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+    clientAuth.logout();
     setUser(null);
   };
 

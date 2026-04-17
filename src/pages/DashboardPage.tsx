@@ -3,7 +3,7 @@ import { CheckCircle2, CheckSquare, Clock, Ticket } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge, Card } from "../components/ui";
 import { cn, formatDate } from "../lib/utils";
-import { getTasks, getTickets } from "../lib/api";
+import { clientTasks, clientTickets } from "../lib/client-api";
 import { Task, Ticket as TicketType, User } from "../types";
 
 export function DashboardPage({ user }: { user: User }) {
@@ -15,8 +15,8 @@ export function DashboardPage({ user }: { user: User }) {
     const fetchData = async () => {
       try {
         const [tasksData, ticketsData] = await Promise.all([
-          getTasks(),
-          getTickets(),
+          clientTasks.getAll(user),
+          clientTickets.getAll(user),
         ]);
         setTasks(Array.isArray(tasksData) ? tasksData : []);
         setTickets(Array.isArray(ticketsData) ? ticketsData : []);

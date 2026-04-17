@@ -3,9 +3,9 @@ import { AlertCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { User } from "../types";
 import { Button, Card, Input } from "../components/ui";
+import { clientAuth } from "../lib/client-api";
 
-const AXIVOLT_LOGO_PATH =
-  "file:///C:/Users/Lasya/.cursor/projects/c-Users-Lasya-Downloads-taskflow-pro/assets/c__Users_Lasya_AppData_Roaming_Cursor_User_workspaceStorage_e30b2fc9cd06fe338571c517313f71d8_images_logo-21b01b60-0e9c-4e1e-b8de-90f945803c53.png";
+const AXIVOLT_LOGO_PATH = "/axivolt-logo.png";
 
 export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   const [email, setEmail] = useState("admin@axisogreen.in");
@@ -18,16 +18,10 @@ export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (res.ok) onLogin(data);
-      else setError(data.error);
-    } catch {
-      setError("Failed to connect to server");
+      const user = await clientAuth.login(email, password);
+      onLogin(user);
+    } catch (err: any) {
+      setError(err.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
