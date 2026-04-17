@@ -4,6 +4,19 @@ import { User } from '../types';
 // Authentication
 export const clientAuth = {
   login: async (email: string, password: string) => {
+    // Temporary admin bypass for static site deployment
+    if (email === 'admin@axisogreen.in' && password === 'Axiso@2024') {
+      const adminUser = {
+        id: 1,
+        name: 'AXIVOLT Admin',
+        email: 'admin@axisogreen.in',
+        role: 'admin',
+        created_at: new Date().toISOString()
+      };
+      localStorage.setItem('taskflow_user', JSON.stringify(adminUser));
+      return adminUser;
+    }
+
     const { data: users, error } = await supabase
       .from('users')
       .select('*')
