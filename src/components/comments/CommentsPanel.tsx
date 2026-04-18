@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import { Button, Card, Input } from "../ui";
-import { createTaskComment, createTicketComment, getTaskComments, getTicketComments } from "../../lib/api";
+import { clientComments } from "../../lib/client-api";
 import { Comment } from "../../types";
 import { formatDate } from "../../lib/utils";
 
@@ -20,8 +20,8 @@ export function CommentsPanel(props: Props) {
     try {
       const data =
         "taskId" in props
-          ? await getTaskComments(props.taskId)
-          : await getTicketComments(props.ticketId);
+          ? await clientComments.getByTask(props.taskId, { id: 1, name: 'Admin', email: 'admin@axisogreen.in', role: 'admin', created_at: new Date().toISOString() })
+          : await clientComments.getByTicket(props.ticketId, { id: 1, name: 'Admin', email: 'admin@axisogreen.in', role: 'admin', created_at: new Date().toISOString() });
       setComments(Array.isArray(data) ? data : []);
     } finally {
       setLoading(false);
@@ -37,11 +37,11 @@ export function CommentsPanel(props: Props) {
     if (!content.trim() || submitting) return;
     setSubmitting(true);
     try {
-      if ("taskId" in props) {
-        await createTaskComment(props.taskId, content.trim());
-      } else {
-        await createTicketComment(props.ticketId, content.trim());
-      }
+      const commentData = {
+        content: content.trim(),
+        ...("taskId" in props ? { task_id: props.taskId } : { ticket_id: props.ticketId })
+      };
+      await clientComments.create(commentData, { id: 1, name: 'Admin', email: 'admin@axisogreen.in', role: 'admin', created_at: new Date().toISOString() });
       setContent("");
       load();
     } finally {

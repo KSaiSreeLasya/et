@@ -8,8 +8,8 @@ import { clientAuth } from "../lib/client-api";
 const AXIVOLT_LOGO_PATH = "/axivolt-logo.png";
 
 export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
-  const [email, setEmail] = useState("admin@axisogreen.in");
-  const [password, setPassword] = useState("Axiso@2024");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -83,12 +83,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
             </Button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-400">
-              Default Admin: admin@axisogreen.in / Axiso@2024
-            </p>
-          </div>
-        </Card>
+                  </Card>
       </motion.div>
     </div>
   );
