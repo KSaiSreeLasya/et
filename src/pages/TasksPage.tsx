@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Badge, Button, Card, Input } from "../components/ui";
 import { CommentsPanel } from "../components/comments/CommentsPanel";
 import { cn, formatDate } from "../lib/utils";
-import { clientTasks, clientUsers } from "../lib/client-api";
+import { clientTasks, clientUsers, clientComments } from "../lib/client-api";
 import { Task, User } from "../types";
 
 export function TasksPage({ user }: { user: User }) {
@@ -26,6 +26,7 @@ export function TasksPage({ user }: { user: User }) {
     assigned_to: "",
   });
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
+  const [taskComments, setTaskComments] = useState<{[key: number]: any}>({});
 
   const fetchTasks = async () => {
     try {
@@ -33,6 +34,26 @@ export function TasksPage({ user }: { user: User }) {
       setTasks(Array.isArray(data) ? data : []);
     } catch {
       setTasks([]);
+    }
+  };
+
+  const fetchTaskComments = async () => {
+    try {
+      const tasksData = await clientTasks.getAll(user);
+      const commentsMap: {[key: number]: any} = {};
+      
+      for (const task of tasksData || []) {
+        if (task.id) {
+          const comments = await clientComments.getByTask(task.id, { id: 1, name: 'Admin', email: 'admin@axisogreen.in', role: 'admin', created_at: new Date().toISOString() });
+          if (comments.length > 0) {
+            commentsMap[task.id] = comments[comments.length - 1];
+          }
+        }
+      }
+      
+      setTaskComments(commentsMap);
+    } catch {
+      setTaskComments({});
     }
   };
 
@@ -48,6 +69,7 @@ export function TasksPage({ user }: { user: User }) {
               : []
           );
         }
+        await fetchTaskComments();
       } finally {
         setLoading(false);
       }
@@ -213,6 +235,9 @@ export function TasksPage({ user }: { user: User }) {
                   Assigned To
                 </th>
                 <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Latest Comment
+                </th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -269,6 +294,20 @@ export function TasksPage({ user }: { user: User }) {
                         {task.assigned_to_name || "Unassigned"}
                       </span>
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {taskComments[task.id] ? (
+                      <div className="max-w-xs">
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                          <span>{taskComments[task.id].user_name}</span>
+                          <span>·</span>
+                          <span>{formatDate(taskComments[task.id].created_at)}</span>
+                        </div>
+                        <p className="text-xs text-gray-700 truncate">{taskComments[task.id].content}</p>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">No comments</span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">

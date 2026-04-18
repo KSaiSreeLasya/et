@@ -11,6 +11,7 @@ export function DashboardPage({ user }: { user: User }) {
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
   const [latestComment, setLatestComment] = useState<any>(null);
+  const [taskComments, setTaskComments] = useState<{[key: number]: any}>({});
 
   const fetchData = useCallback(async () => {
     try {
@@ -25,6 +26,26 @@ export function DashboardPage({ user }: { user: User }) {
       setTickets([]);
     } finally {
       setLoading(false);
+    }
+  }, [user]);
+
+  const fetchTaskComments = useCallback(async () => {
+    try {
+      const tasksData = await clientTasks.getAll(user);
+      const commentsMap: {[key: number]: any} = {};
+      
+      for (const task of tasksData || []) {
+        if (task.id) {
+          const comments = await clientComments.getByTask(task.id, { id: 1, name: 'Admin', email: 'admin@axisogreen.in', role: 'admin', created_at: new Date().toISOString() });
+          if (comments.length > 0) {
+            commentsMap[task.id] = comments[comments.length - 1];
+          }
+        }
+      }
+      
+      setTaskComments(commentsMap);
+    } catch {
+      setTaskComments({});
     }
   }, [user]);
 
@@ -62,7 +83,8 @@ export function DashboardPage({ user }: { user: User }) {
   useEffect(() => {
     fetchData();
     fetchLatestComment();
-  }, [fetchData, fetchLatestComment]);
+    fetchTaskComments();
+  }, [fetchData, fetchLatestComment, fetchTaskComments]);
 
   const stats = [
     {
@@ -169,7 +191,7 @@ export function DashboardPage({ user }: { user: User }) {
                 <div className="bg-white rounded-xl p-4 shadow-sm border border border-gray-100">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-semibold text-gray-900">{latestComment.user_name || 'Unknown User'}</h4>
-                    <Badge variant="default" className="text-xs">
+                    <Badge variant="default">
                       {formatDate(latestComment.created_at)}
                     </Badge>
                   </div>
@@ -196,37 +218,60 @@ export function DashboardPage({ user }: { user: User }) {
             {tasks.slice(0, 5).map((task) => (
               <div
                 key={task.id}
-                className="p-4 flex items-center gap-4 hover:bg-gray-50 transition-colors"
+                className="p-4 hover:bg-gray-50 transition-colors"
               >
-                <div
-                  className={cn(
-                    "w-2 h-2 rounded-full",
-                    task.priority === "High"
-                      ? "bg-rose-500"
-                      : task.priority === "Medium"
-                        ? "bg-amber-500"
-                        : "bg-emerald-500"
-                  )}
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">
-                    {task.title}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Due {formatDate(task.deadline)}
-                  </p>
+                <div className="flex items-start gap-4">
+                  <div
+                    className={cn(
+                      "w-2 h-2 rounded-full mt-2",
+                      task.priority === "High"
+                        ? "bg-rose-500"
+                        : task.priority === "Medium"
+                          ? "bg-amber-500"
+                          : "bg-emerald-500"
+                    )}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-gray-900">
+                        {task.title}
+                      </p>
+                      <Badge
+                        variant={
+                          task.status === "Completed"
+                            ? "success"
+                            : task.status === "In Progress"
+                              ? "info"
+                              : "default"
+                        }
+                      >
+                        {task.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-500">
+                      <div>
+                        <span className="font-medium">Due:</span> {formatDate(task.deadline)}
+                      </div>
+                      <div>
+                        <span className="font-medium">Assigned:</span> {task.assigned_to_name || 'Unassigned'}
+                      </div>
+                      <div>
+                        <span className="font-medium">Action:</span> {task.status}
+                      </div>
+                    </div>
+                    {taskComments[task.id] && (
+                      <div className="mt-2 p-2 bg-indigo-50 rounded-lg">
+                        <div className="flex items-center gap-2 text-xs text-indigo-700 mb-1">
+                          <span className="font-medium">Latest Comment:</span>
+                          <span>{taskComments[task.id].user_name}</span>
+                          <span>·</span>
+                          <span>{formatDate(taskComments[task.id].created_at)}</span>
+                        </div>
+                        <p className="text-xs text-gray-700">{taskComments[task.id].content}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <Badge
-                  variant={
-                    task.status === "Completed"
-                      ? "success"
-                      : task.status === "In Progress"
-                        ? "info"
-                        : "default"
-                  }
-                >
-                  {task.status}
-                </Badge>
               </div>
             ))}
             {tasks.length === 0 && (
