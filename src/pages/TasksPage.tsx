@@ -25,6 +25,7 @@ export function TasksPage({ user }: { user: User }) {
     deadline: "",
     assigned_to: "",
   });
+  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
 
   const fetchTasks = async () => {
     try {
@@ -56,7 +57,23 @@ export function TasksPage({ user }: { user: User }) {
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    await clientTasks.create(newTask as any, user);
+    
+    // Handle multiple employee assignment
+    let assignedToValue = newTask.assigned_to;
+    if (Array.isArray(assignedToValue)) {
+      // If "all" is selected, assign to all employees
+      if (assignedToValue.includes("all")) {
+        assignedToValue = employees.map(emp => emp.id);
+      } else {
+        assignedToValue = assignedToValue;
+      }
+    }
+    
+    await clientTasks.create({ 
+      ...newTask, 
+      assigned_to: assignedToValue 
+    } as any, user);
+    
     setIsModalOpen(false);
     setNewTask({
       title: "",
@@ -506,12 +523,16 @@ export function TasksPage({ user }: { user: User }) {
                   <select
                     required
                     className="flex h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newTask.assigned_to}
-                    onChange={(e) =>
-                      setNewTask({ ...newTask, assigned_to: e.target.value })
-                    }
+                    value={selectedEmployees}
+                    onChange={(e: any) => {
+                      const values = Array.from(e.target.selectedOptions, (option: any) => option.value);
+                      setSelectedEmployees(values as number[]);
+                      setNewTask({ ...newTask, assigned_to: values });
+                    }}
+                    multiple
                   >
                     <option value="">Select Employee</option>
+                    <option value="all">All Employees</option>
                     {employees.map((emp) => (
                       <option key={emp.id} value={emp.id}>
                         {emp.name}

@@ -1,18 +1,50 @@
 import React, { useEffect, useState } from "react";
-import { CheckCircle2, CheckSquare, Clock, Ticket } from "lucide-react";
+import { CheckCircle2, CheckSquare, Clock, MessageSquare, Ticket } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge, Card } from "../components/ui";
 import { cn, formatDate } from "../lib/utils";
-import { clientTasks, clientTickets } from "../lib/client-api";
+import { clientTasks, clientTickets, clientComments } from "../lib/client-api";
 import { Task, Ticket as TicketType, User } from "../types";
 
 export function DashboardPage({ user }: { user: User }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [latestComment, setLatestComment] = useState<any>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchLatestComment = async () => {
+    try {
+      // Get all tasks and tickets to find latest comments
+      const [tasksData, ticketsData] = await Promise.all([
+        clientTasks.getAll(user),
+        clientTickets.getAll(user),
+      ]);
+      
+      const allItems = [...(tasksData || []), ...(ticketsData || [])];
+      let latestComment: any = null;
+      let latestDate = new Date(0);
+      
+      for (const item of allItems) {
+        if (item.id) {
+          const comments = await clientComments.getByTask(item.id, { id: 1, name: 'Admin', email: 'admin@axisogreen.in', role: 'admin', created_at: new Date().toISOString() });
+          if (comments.length > 0) {
+            const comment = comments[comments.length - 1];
+            if (new Date(comment.created_at) > latestDate) {
+              latestDate = new Date(comment.created_at);
+              latestComment = comment;
+            }
+          }
+        }
+      }
+      
+      setLatestComment(latestComment);
+    } catch {
+      setLatestComment(null);
+    }
+  };
+
+  const fetchData = async () => {
       try {
         const [tasksData, ticketsData] = await Promise.all([
           clientTasks.getAll(user),
@@ -27,7 +59,11 @@ export function DashboardPage({ user }: { user: User }) {
         setLoading(false);
       }
     };
-    fetchData();
+    
+    useEffect(() => {
+      fetchData();
+      fetchLatestComment();
+    }, []);
   }, []);
 
   const stats = [
@@ -100,6 +136,35 @@ export function DashboardPage({ user }: { user: User }) {
           </Card>
         ))}
       </div>
+
+      {latestComment && (
+        <Card>
+          <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={18} className="text-indigo-600" />
+              <div className="font-semibold text-gray-900">Latest Comment</div>
+            </div>
+            <Link
+              to="/tasks"
+              className="text-sm text-indigo-600 font-medium hover:underline"
+            >
+              View all
+            </Link>
+          </div>
+          <div className="p-6">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-lg">
+                {latestComment.user_name?.charAt(0) || "?"}
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold text-gray-900">{latestComment.user_name || 'Unknown User'}</div>
+                <div className="text-xs text-gray-500">{formatDate(latestComment.created_at)}</div>
+                <div className="text-sm text-gray-700 mt-1">{latestComment.content}</div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <Card>
