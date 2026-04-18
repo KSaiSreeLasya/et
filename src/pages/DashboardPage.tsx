@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, CheckSquare, Clock, MessageSquare, Ticket } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge, Card } from "../components/ui";
@@ -12,8 +12,23 @@ export function DashboardPage({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
   const [latestComment, setLatestComment] = useState<any>(null);
 
-  useEffect(() => {
-    const fetchLatestComment = async () => {
+  const fetchData = useCallback(async () => {
+    try {
+      const [tasksData, ticketsData] = await Promise.all([
+        clientTasks.getAll(user),
+        clientTickets.getAll(user),
+      ]);
+      setTasks(Array.isArray(tasksData) ? tasksData : []);
+      setTickets(Array.isArray(ticketsData) ? ticketsData : []);
+    } catch {
+      setTasks([]);
+      setTickets([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const fetchLatestComment = useCallback(async () => {
     try {
       // Get all tasks and tickets to find latest comments
       const [tasksData, ticketsData] = await Promise.all([
@@ -42,29 +57,12 @@ export function DashboardPage({ user }: { user: User }) {
     } catch {
       setLatestComment(null);
     }
-  };
+  }, [user]);
 
-  const fetchData = async () => {
-      try {
-        const [tasksData, ticketsData] = await Promise.all([
-          clientTasks.getAll(user),
-          clientTickets.getAll(user),
-        ]);
-        setTasks(Array.isArray(tasksData) ? tasksData : []);
-        setTickets(Array.isArray(ticketsData) ? ticketsData : []);
-      } catch {
-        setTasks([]);
-        setTickets([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    useEffect(() => {
-      fetchData();
-      fetchLatestComment();
-    }, []);
-  }, []);
+  useEffect(() => {
+    fetchData();
+    fetchLatestComment();
+  }, [fetchData, fetchLatestComment]);
 
   const stats = [
     {
@@ -138,28 +136,45 @@ export function DashboardPage({ user }: { user: User }) {
       </div>
 
       {latestComment && (
-        <Card>
+        <Card className="hover:shadow-lg transition-shadow duration-200">
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MessageSquare size={18} className="text-indigo-600" />
-              <div className="font-semibold text-gray-900">Latest Comment</div>
-            </div>
-            <Link
-              to="/tasks"
-              className="text-sm text-indigo-600 font-medium hover:underline"
-            >
-              View all
-            </Link>
-          </div>
-          <div className="p-6">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-lg">
-                {latestComment.user_name?.charAt(0) || "?"}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100 flex items-center justify-center text-white shadow-lg">
+                <MessageSquare size={20} className="text-white" />
               </div>
-              <div className="flex-1">
-                <div className="font-semibold text-gray-900">{latestComment.user_name || 'Unknown User'}</div>
-                <div className="text-xs text-gray-500">{formatDate(latestComment.created_at)}</div>
-                <div className="text-sm text-gray-700 mt-1">{latestComment.content}</div>
+              <div className="flex items-center gap-3">
+                <h3 className="font-bold text-lg text-gray-900">Latest Comment</h3>
+                <Link
+                  to="/tasks"
+                  className="inline-flex items-center gap-2 text-sm text-indigo-600 font-medium hover:text-indigo-700 hover:underline transition-colors"
+                >
+                  View all comments
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7 7s-1m0 0l-3 3m3 9a9 9 9l-3-3 9a9 9 9l-3-3m-6 0a6 0z" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+          </div>
+          <div className="p-6 bg-gradient-to-br from-gray-50 to-indigo-50 rounded-xl">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white shadow-xl">
+                  <span className="text-lg font-bold">
+                    {latestComment.user_name?.charAt(0) || "?"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="bg-white rounded-xl p-4 shadow-sm border border border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-gray-900">{latestComment.user_name || 'Unknown User'}</h4>
+                    <Badge variant="default" className="text-xs">
+                      {formatDate(latestComment.created_at)}
+                    </Badge>
+                  </div>
+                  <p className="text-gray-700 leading-relaxed">{latestComment.content}</p>
+                </div>
               </div>
             </div>
           </div>

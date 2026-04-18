@@ -523,13 +523,10 @@ export function TasksPage({ user }: { user: User }) {
                   <select
                     required
                     className="flex h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={selectedEmployees}
-                    onChange={(e: any) => {
-                      const values = Array.from(e.target.selectedOptions, (option: any) => option.value);
-                      setSelectedEmployees(values as number[]);
-                      setNewTask({ ...newTask, assigned_to: values });
-                    }}
-                    multiple
+                    value={newTask.assigned_to}
+                    onChange={(e) =>
+                      setNewTask({ ...newTask, assigned_to: e.target.value })
+                    }
                   >
                     <option value="">Select Employee</option>
                     <option value="all">All Employees</option>
