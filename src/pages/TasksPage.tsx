@@ -23,7 +23,7 @@ export function TasksPage({ user }: { user: User }) {
     description: "",
     priority: "Medium",
     deadline: "",
-    assigned_to: "",
+    assigned_to: "all",
   });
   const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
   const [taskComments, setTaskComments] = useState<{[key: number]: any}>({});
@@ -80,20 +80,27 @@ export function TasksPage({ user }: { user: User }) {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Handle multiple employee assignment
+    // Handle assignment
     let assignedToValue = newTask.assigned_to;
-    if (Array.isArray(assignedToValue)) {
-      // If "all" is selected, assign to all employees
-      if (assignedToValue.includes("all")) {
-        assignedToValue = employees.map(emp => emp.id);
-      } else {
-        assignedToValue = assignedToValue;
-      }
+    let assignedToAll = false;
+    
+    if (assignedToValue === "all") {
+      // For "All Employees", set assigned_to to null and assigned_to_all to true
+      assignedToValue = null;
+      assignedToAll = true;
+    } else if (assignedToValue) {
+      // Convert to number for individual employee
+      assignedToValue = Number(assignedToValue);
+    } else {
+      // Default to first employee only if no selection
+      assignedToValue = employees[0]?.id;
+      assignedToAll = false;
     }
     
     await clientTasks.create({ 
       ...newTask, 
-      assigned_to: assignedToValue 
+      assigned_to: assignedToValue,
+      assigned_to_all: assignedToAll
     } as any, user);
     
     setIsModalOpen(false);
@@ -288,10 +295,18 @@ export function TasksPage({ user }: { user: User }) {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-600">
-                        {task.assigned_to_name?.charAt(0) || "?"}
+                        {
+                          task.assigned_to_all 
+                            ? 'A' 
+                            : task.assigned_to_name?.charAt(0) || "?"
+                        }
                       </div>
                       <span className="text-sm text-gray-700">
-                        {task.assigned_to_name || "Unassigned"}
+                        {
+                          task.assigned_to_all 
+                            ? 'All Employees' 
+                            : task.assigned_to_name || 'Unassigned'
+                        }
                       </span>
                     </div>
                   </td>
@@ -428,10 +443,14 @@ export function TasksPage({ user }: { user: User }) {
                         <label className="block text-xs font-semibold text-gray-500 mb-1">Assignee</label>
                         <select
                           className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm"
-                          value={String(detailsTask.assigned_to || "")}
-                          onChange={(e) => setDetailsTask({ ...detailsTask, assigned_to: Number(e.target.value) as any })}
+                          value={
+                            detailsTask.assigned_to_all 
+                              ? "all" 
+                              : String(detailsTask.assigned_to || "")
+                          }
+                          onChange={(e) => setDetailsTask({ ...detailsTask, assigned_to: e.target.value === "all" ? null : Number(e.target.value) as any, assigned_to_all: e.target.value === "all" })}
                         >
-                          <option value="">Unassigned</option>
+                          <option value="all">All Employees</option>
                           {employees.map((emp) => (
                             <option key={emp.id} value={String(emp.id)}>
                               {emp.name}
@@ -565,7 +584,6 @@ export function TasksPage({ user }: { user: User }) {
                       setNewTask({ ...newTask, assigned_to: e.target.value })
                     }
                   >
-                    <option value="">Select Employee</option>
                     <option value="all">All Employees</option>
                     {employees.map((emp) => (
                       <option key={emp.id} value={emp.id}>

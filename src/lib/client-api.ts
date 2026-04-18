@@ -53,11 +53,11 @@ export const clientTasks = {
   getAll: async (user: User) => {
     let query = supabase
       .from('tasks')
-      .select('id, title, description, priority, status, deadline, assigned_to, created_by, created_at')
+      .select('id, title, description, priority, status, deadline, assigned_to, created_by, created_at, assigned_to_all')
       .order('created_at', { ascending: false });
 
     if (user.role !== 'admin') {
-      query = query.eq('assigned_to', Number(user.id));
+      query = query.or(`assigned_to.eq.${Number(user.id)},assigned_to_all.eq.true`);
     }
 
     const { data: tasks, error } = await query;
@@ -87,13 +87,15 @@ export const clientTasks = {
       .from('tasks')
       .insert({
         ...task,
-        assigned_to: task.assigned_to ? Number(task.assigned_to) : null,
         created_by: Number(user.id),
       })
       .select('id')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Task creation error:', error);
+      throw error;
+    }
     return { id: data?.id };
   },
 
@@ -108,7 +110,18 @@ export const clientTasks = {
       if (typeof updates.deadline !== 'undefined') patch.deadline = updates.deadline;
       if (typeof updates.status !== 'undefined') patch.status = updates.status;
       if (typeof updates.assigned_to !== 'undefined') {
-        patch.assigned_to = updates.assigned_to ? Number(updates.assigned_to) : null;
+        // Handle "All Employees" assignment
+        if (updates.assigned_to === 0) {
+          // For "All Employees", set assigned_to to null and assigned_to_all to true
+          patch.assigned_to = null;
+          patch.assigned_to_all = true;
+        } else {
+          patch.assigned_to = updates.assigned_to ? Number(updates.assigned_to) : null;
+          patch.assigned_to_all = false;
+        }
+      }
+      if (typeof updates.assigned_to_all !== 'undefined') {
+        patch.assigned_to_all = updates.assigned_to_all;
       }
     } else {
       // Employees can only update status

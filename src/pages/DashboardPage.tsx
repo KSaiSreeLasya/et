@@ -253,7 +253,11 @@ export function DashboardPage({ user }: { user: User }) {
                         <span className="font-medium">Due:</span> {formatDate(task.deadline)}
                       </div>
                       <div>
-                        <span className="font-medium">Assigned:</span> {task.assigned_to_name || 'Unassigned'}
+                        <span className="font-medium">Assigned:</span> {
+                          task.assigned_to_all 
+                            ? 'All Employees' 
+                            : task.assigned_to_name || 'Unassigned'
+                        }
                       </div>
                       <div>
                         <span className="font-medium">Action:</span> {task.status}
