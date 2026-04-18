@@ -3,7 +3,7 @@ import { AlertCircle, Briefcase, Calendar, Plus, Ticket, User as UserIcon } from
 import { AnimatePresence, motion } from "motion/react";
 import { Badge, Button, Card, Input } from "../components/ui";
 import { formatDate } from "../lib/utils";
-import { createTask, createTicket, getTickets, getUsers, updateTicket } from "../lib/api";
+import { clientTasks, clientTickets, clientUsers } from "../lib/client-api";
 import { Ticket as TicketType, User } from "../types";
 
 export function TicketsPage({ user }: { user: User }) {
@@ -31,7 +31,7 @@ export function TicketsPage({ user }: { user: User }) {
 
   const fetchTickets = async () => {
     try {
-      const data = await getTickets();
+      const data = await clientTickets.getAll(user);
       setTickets(Array.isArray(data) ? data : []);
     } catch {
       setTickets([]);
@@ -43,7 +43,7 @@ export function TicketsPage({ user }: { user: User }) {
       try {
         await fetchTickets();
         if (user.role === "admin") {
-          const allUsers = await getUsers();
+          const allUsers = await clientUsers.getAll();
           setEmployees(
             Array.isArray(allUsers)
               ? allUsers.filter((u: User) => u.role === "employee")
@@ -82,7 +82,7 @@ export function TicketsPage({ user }: { user: User }) {
 
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createTicket(newTicket as any);
+    await clientTickets.create(newTicket as any, user);
     setIsModalOpen(false);
     setNewTicket({ title: "", description: "", category: "Technical", priority: "Medium" });
     fetchTickets();
@@ -90,13 +90,13 @@ export function TicketsPage({ user }: { user: User }) {
 
   const handleStatusUpdate = async (ticketId: number, status: string) => {
     if (user.role !== "admin") return;
-    await updateTicket(ticketId, { status: status as any });
+    await clientTickets.update(ticketId, { status: status as any }, user);
     fetchTickets();
   };
 
   const handleAssignUpdate = async (ticketId: number, assigned_to: string) => {
     if (user.role !== "admin") return;
-    await updateTicket(ticketId, { assigned_to: assigned_to ? Number(assigned_to) : null });
+    await clientTickets.update(ticketId, { assigned_to: assigned_to ? Number(assigned_to) : null }, user);
     fetchTickets();
   };
 
@@ -321,7 +321,7 @@ export function TicketsPage({ user }: { user: User }) {
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  await createTask(newTaskFromTicket as any);
+                  await clientTasks.create(newTaskFromTicket as any, user);
                   setCreateFromTicket(null);
                 }}
                 className="p-6 space-y-4"

@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Badge, Button, Card, Input } from "../components/ui";
 import { cn } from "../lib/utils";
-import { createUser, deleteUser, getUsers, updateUser } from "../lib/api";
+import { clientUsers } from "../lib/client-api";
 import { User } from "../types";
 
 export function UsersPage() {
@@ -25,7 +25,7 @@ export function UsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const data = await getUsers();
+      const data = await clientUsers.getAll();
       setUsers(Array.isArray(data) ? data : []);
     } catch {
       setUsers([]);
@@ -59,9 +59,9 @@ export function UsersPage() {
 
     try {
       if (method === "POST") {
-        await createUser(formData as any);
+        await clientUsers.create(formData as any);
       } else if (editingUser) {
-        await updateUser(editingUser.id, {
+        await clientUsers.update(editingUser.id, {
           name: formData.name,
           email: formData.email,
           role: formData.role as any,
@@ -89,7 +89,7 @@ export function UsersPage() {
   const handleDeleteUser = async (id: number) => {
     if (confirm("Are you sure you want to remove this user?")) {
       try {
-        await deleteUser(id);
+        await clientUsers.delete(id, 1); // 1 is current user ID (admin)
         fetchUsers();
       } catch (e: any) {
         alert(e?.message || "Failed to delete user");

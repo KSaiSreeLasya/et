@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Badge, Button, Card, Input } from "../components/ui";
 import { CommentsPanel } from "../components/comments/CommentsPanel";
 import { cn, formatDate } from "../lib/utils";
-import { createTask, deleteTask, getTask, getTasks, getUsers, updateTask, updateTaskStatus } from "../lib/api";
+import { clientTasks, clientUsers } from "../lib/client-api";
 import { Task, User } from "../types";
 
 export function TasksPage({ user }: { user: User }) {
@@ -28,7 +28,7 @@ export function TasksPage({ user }: { user: User }) {
 
   const fetchTasks = async () => {
     try {
-      const data = await getTasks();
+      const data = await clientTasks.getAll(user);
       setTasks(Array.isArray(data) ? data : []);
     } catch {
       setTasks([]);
@@ -40,7 +40,7 @@ export function TasksPage({ user }: { user: User }) {
       try {
         await fetchTasks();
         if (user.role === "admin") {
-          const allUsers = await getUsers();
+          const allUsers = await clientUsers.getAll();
           setEmployees(
             Array.isArray(allUsers)
               ? allUsers.filter((u: User) => u.role === "employee")
@@ -56,7 +56,7 @@ export function TasksPage({ user }: { user: User }) {
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createTask(newTask as any);
+    await clientTasks.create(newTask as any, user);
     setIsModalOpen(false);
     setNewTask({
       title: "",
@@ -69,13 +69,13 @@ export function TasksPage({ user }: { user: User }) {
   };
 
   const handleStatusUpdate = async (taskId: number, newStatus: string) => {
-    await updateTaskStatus(taskId, newStatus as any);
+    await clientTasks.update(taskId, { status: newStatus }, user);
     fetchTasks();
   };
 
   const handleDeleteTask = async (taskId: number) => {
     if (confirm("Are you sure you want to delete this task?")) {
-      await deleteTask(taskId);
+      await clientTasks.delete(taskId);
       fetchTasks();
     }
   };
@@ -108,8 +108,11 @@ export function TasksPage({ user }: { user: User }) {
     setDetailsLoading(true);
     setDetailsTask(null);
     try {
-      const t = await getTask(taskId);
-      setDetailsTask(t);
+      const tasks = await clientTasks.getAll(user);
+      const t = tasks.find(task => task.id === taskId);
+      if (t) {
+        setDetailsTask(t);
+      }
     } finally {
       setDetailsLoading(false);
     }
@@ -393,18 +396,14 @@ export function TasksPage({ user }: { user: User }) {
                       <Button
                         onClick={async () => {
                           if (!detailsTask) return;
-                          if (user.role === "admin") {
-                            await updateTask(detailsTask.id, {
-                              title: detailsTask.title,
-                              description: detailsTask.description,
-                              status: detailsTask.status,
-                              priority: detailsTask.priority,
-                              deadline: detailsTask.deadline,
-                              assigned_to: detailsTask.assigned_to,
-                            } as any);
-                          } else {
-                            await updateTaskStatus(detailsTask.id, detailsTask.status);
-                          }
+                          await clientTasks.update(detailsTask.id, {
+                            title: detailsTask.title,
+                            description: detailsTask.description,
+                            status: detailsTask.status,
+                            priority: detailsTask.priority,
+                            deadline: detailsTask.deadline,
+                            assigned_to: detailsTask.assigned_to,
+                          }, user);
                           setDetailsTask(null);
                           fetchTasks();
                         }}
