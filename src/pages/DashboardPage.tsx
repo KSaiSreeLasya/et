@@ -263,8 +263,6 @@ export function DashboardPage({ user }: { user: User }) {
                       <div className="mt-2 p-2 bg-indigo-50 rounded-lg">
                         <div className="flex items-center gap-2 text-xs text-indigo-700 mb-1">
                           <span className="font-medium">Latest Comment:</span>
-                          <span>{taskComments[task.id].user_name}</span>
-                          <span>·</span>
                           <span>{formatDate(taskComments[task.id].created_at)}</span>
                         </div>
                         <p className="text-xs text-gray-700">{taskComments[task.id].content}</p>

@@ -299,8 +299,6 @@ export function TasksPage({ user }: { user: User }) {
                     {taskComments[task.id] ? (
                       <div className="max-w-xs">
                         <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                          <span>{taskComments[task.id].user_name}</span>
-                          <span>·</span>
                           <span>{formatDate(taskComments[task.id].created_at)}</span>
                         </div>
                         <p className="text-xs text-gray-700 truncate">{taskComments[task.id].content}</p>
